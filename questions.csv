@@ -1,0 +1,11 @@
+group,task,type,instructions,options
+intent,department,choice,Which department should handle this message?,"billing: invoices, payments, refunds | technical: bugs, errors, app not working | sales: pricing, plans, buying | other: anything else"
+sentiment,sentiment,choice,What is the tone of this message?,"positive: happy, satisfied, praising | negative: unhappy, angry, complaining | neutral: factual, no clear feeling"
+spam,is_spam_or_scam,choice,Is this message spam or a scam attempt?,"yes: yes, spam or scam | no: no, a normal message"
+complaint,is_complaint,choice,Is this message a complaint?,"yes: yes, it is a complaint | no: no, it is not a complaint"
+urgency,urgency,score,How urgent is this?,not urgent | should be done soon | critical
+topics15,topic,choice,What is this sentence about?,sports | cooking | travel | music | weather | health | money | cars | movies | school | pets | gardening | computers | fashion | politics
+languages,department,choice,Which department should handle this message?,"billing: invoices, payments, refunds | technical: bugs, errors, app not working | other: anything else"
+longtext,mentions_security_problem,choice,Does this text mention a security problem?,"yes: yes, a security problem is mentioned | no: no security problem is mentioned"
+arithmetic,statement_is_mathematically_correct,choice,Is the statement in this text mathematically correct?,"yes: yes, the numbers are correct | no: no, the numbers are wrong"
+rag,answer_correctness_given_context,choice,Is the answer correct according to the context?,correct: the answer is supported by the context | incorrect: the answer contradicts the context | unsupported: the answer states something the context does not mention

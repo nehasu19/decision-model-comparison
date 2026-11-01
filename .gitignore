@@ -1,0 +1,9 @@
+results_*.csv
+timings.json
+__pycache__/
+*-env/
+.env
+assistant_data.json
+*.png
+test-app/
+test-app.zip
