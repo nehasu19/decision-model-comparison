@@ -1,6 +1,6 @@
-# Decision model comparison: Laya, GLiNER2.5-Decide and Jev
+# Decision model comparison: Laya, GLiNER2.5-Decide, OpenDecider and Jev
 
-A small test bench that sends the same test cases to three "decision models"
+A small test bench that sends the same test cases to four "decision models"
 and compares the answers in a Streamlit page.
 
 A decision model does not write text. You give it a short text and a fixed set
@@ -10,11 +10,13 @@ of options, and it picks one.
 |---|---|---|
 | Laya | On your machine | Open source (Apache 2.0) |
 | GLiNER2.5-Decide | On your machine | Open source (Apache 2.0), English only |
+| OpenDecider nano | On your machine | Open source (Apache 2.0), about 400M parameters |
 | Jev | TypeSafe's servers, via OpenRouter | Hosted and paid; needs an API key |
 
 > Status: built and run on Ubuntu with Python 3.10. The macOS steps below
-> follow the same procedure but have not been tested on a Mac. The GLiNER
-> setup in particular was still being completed when this was written.
+> follow the same procedure but have not been tested on a Mac.
+>
+> Latest results: see [RESULTS.md](RESULTS.md).
 
 ## What is in the folder
 
@@ -24,6 +26,8 @@ of options, and it picks one.
 | `run_tests.py` | Runs the test cases against one model and saves `results_<model>.csv` |
 | `testcases.csv` | The test cases: id, group, text, expected answer (74 rows) |
 | `questions.csv` | One row per test group: the question and its options (10 rows) |
+| `hallucination/` | A second test set: 48 RAG answers to label correct, contradicted or made up, plus `report.py` |
+| `RESULTS.md` | Results of the latest runs |
 
 The ten test groups: intent routing, sentiment, spam, complaint (yes/no),
 urgency rating, 15 topics, four languages (German, Spanish, Dutch, French),
@@ -51,7 +55,7 @@ cd path/to/this/folder
 ```
 
 Each local model gets its own Python environment so their libraries cannot
-clash. The app expects them at `~/laya-env` and `~/gliner-env`.
+clash. The app expects them at `~/laya-env`, `~/gliner-env` and `~/opendecider-env`.
 
 ### 1. Laya environment (also used for the app and for Jev)
 
@@ -78,7 +82,17 @@ them in on the original machine. If a run stops with
 `ModuleNotFoundError: No module named 'X'`, activate this environment and run
 `pip install X`.
 
-### 3. API key for Jev (optional)
+### 3. OpenDecider environment
+
+```bash
+python3 -m venv ~/opendecider-env
+source ~/opendecider-env/bin/activate
+python -m pip install --upgrade pip
+pip install opendecider
+deactivate
+```
+
+### 4. API key for Jev (optional)
 
 You can skip Jev by unticking it in the app. To include it, create your own
 key at OpenRouter. Enter it in the app's sidebar, or set it in the terminal
@@ -103,6 +117,20 @@ deactivate
 source ~/gliner-env/bin/activate
 python run_tests.py gliner
 deactivate
+
+source ~/opendecider-env/bin/activate
+python run_tests.py opendecider
+deactivate
+```
+
+### The hallucination test set
+
+Add `--data hallucination` to run the second test set, then print a summary
+of how many wrong and made-up answers each model caught:
+
+```bash
+python run_tests.py laya --data hallucination
+python hallucination/report.py
 ```
 
 Each run prints a scorecard and writes `results_<model>.csv`. The first run of
