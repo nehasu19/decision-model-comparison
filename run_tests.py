@@ -14,7 +14,11 @@ Run (in the environment that has the model's package):
 Jev is hosted, so it sends the texts to a server and needs
     export OPENROUTER_API_KEY="your-key"     (or TYPESAFE_API_KEY)
 
-Each run prints a scorecard and saves results_<model>.csv.
+Another test set:  python run_tests.py laya --data hallucination
+
+Each run prints a scorecard and saves results_<model>.csv, including the
+response time of every case in milliseconds (the "ms" column). One untimed
+warm-up question is sent first, so model loading is not counted.
 
 Editing the tests: open the CSV files in a spreadsheet or text editor.
   * Add an example: add a row to testcases.csv with an existing group name.
@@ -26,6 +30,7 @@ Editing the tests: open the CSV files in a spreadsheet or text editor.
 
 import csv
 import os
+import statistics
 import sys
 import time
 import warnings
@@ -157,51 +162,79 @@ class Gliner:
         return str(value), None
 
 
-MODELS = {"laya": Laya, "jev": Jev, "gliner": Gliner}
+class OpenDecider:
+    """Same question format as Laya and Jev, runs locally."""
+
+    def __init__(self):
+        from opendecider import load
+        self.model = load("manjunathshiva/opendecider-nano")
+
+    def ask(self, text, q):
+        out = self.model.system_one(text, {"q": systemone_question(q)})
+        return read_systemone(out["answers"]["q"], q)
+
+
+MODELS = {"laya": Laya, "jev": Jev, "gliner": Gliner, "opendecider": OpenDecider}
 
 
 # ---------------------------------------------------------------- running
 
 def main():
+    data = HERE
+    if "--data" in sys.argv:
+        i = sys.argv.index("--data")
+        data = (HERE / sys.argv[i + 1]).resolve()
+        del sys.argv[i:i + 2]
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     if not args or args[0] not in MODELS:
-        sys.exit("Usage: python run_tests.py laya | jev | gliner")
+        sys.exit("Usage: python run_tests.py laya | jev | gliner | opendecider")
     name = args[0]
 
-    questions = load_questions(HERE / "questions.csv")
-    cases = load_cases(HERE / "testcases.csv", questions)
+    questions = load_questions(data / "questions.csv")
+    cases = load_cases(data / "testcases.csv", questions)
     print(f"{len(cases)} test cases in {len(questions)} groups. Loading {name} ...")
     model = MODELS[name]()
 
-    rows, score = [], {g: [0, 0] for g in questions}
-    start = time.perf_counter()
+    # Untimed warm-up, so the first real case does not pay for model start-up.
+    model.ask(cases[0][2], questions[cases[0][1]])
+
+    rows, times = [], []
+    score = {g: [0, 0] for g in questions}
+    slow = {g: [] for g in questions}
     for case_id, group, text, expected in cases:
+        start = time.perf_counter()
         got, prob = model.ask(text, questions[group])
+        ms = (time.perf_counter() - start) * 1000
+        times.append(ms)
+        slow[group].append(ms)
         ok = str(got).strip().lower() == expected.lower()
         score[group][0] += ok
         score[group][1] += 1
         rows.append([case_id, group, " ".join(text.split())[:90], expected, got,
                      "" if prob is None else f"{prob:.2f}",
-                     "PASS" if ok else "FAIL"])
-    seconds = time.perf_counter() - start
+                     "PASS" if ok else "FAIL", f"{ms:.0f}"])
 
     total = sum(s[0] for s in score.values())
     print(f"\nSCORECARD for {name}: {total}/{len(cases)} correct")
     for group, (right, n) in score.items():
         if n:
-            print(f"  {group:<14}{right}/{n}")
-    print(f"\nAverage time per question: {seconds / len(cases) * 1000:.0f} ms")
+            print(f"  {group:<14}{right}/{n:<6}{statistics.mean(slow[group]):7.0f} ms average")
+
+    print("\nRESPONSE TIME")
+    print(f"Average time per question: {statistics.mean(times):.0f} ms")
+    print(f"Median: {statistics.median(times):.0f} ms   "
+          f"Fastest: {min(times):.0f} ms   Slowest: {max(times):.0f} ms")
 
     print("\nFAILED CASES")
     for r in rows:
         if r[6] == "FAIL":
             print(f"  #{r[0]} [{r[1]}] expected={r[3]} got={r[4]} {r[5]}  {r[2][:55]}")
 
-    out = HERE / f"results_{name}.csv"
+    out = data / f"results_{name}.csv"
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["id", "group", "text", "expected", "got", "probability",
-                    "result"])
+                    "result", "ms"])
         w.writerows(rows)
     print(f"\nSaved to {out.name}")
 

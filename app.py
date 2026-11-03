@@ -33,6 +33,8 @@ MODELS = {
              "python": HOME / "laya-env/bin/python"},
     "gliner": {"label": "GLiNER2.5-Decide", "where": "local, open source",
                "color": "#1baf7a", "python": HOME / "gliner-env/bin/python"},
+    "opendecider": {"label": "OpenDecider nano", "where": "local, open source",
+                    "color": "#4a3aa7", "python": HOME / "opendecider-env/bin/python"},
     "jev": {"label": "Jev", "where": "hosted, paid API", "color": "#eb6834",
             "python": HOME / "laya-env/bin/python"},
 }
@@ -81,6 +83,8 @@ def load_results():
         if path.exists():
             frame = pd.read_csv(path, dtype=str, keep_default_na=False)
             frame["correct"] = frame["result"] == "PASS"
+            if "ms" in frame:
+                frame["ms"] = pd.to_numeric(frame["ms"], errors="coerce")
             results[name] = frame
     return results
 
@@ -162,9 +166,13 @@ for tile, (name, frame) in zip(tiles, results.items()):
     with tile:
         st.metric(MODELS[name]["label"], f"{right}/{total}",
                   f"{right / total:.0%} correct", delta_color="off")
-        speed = timings.get(name)
-        st.caption(MODELS[name]["where"]
-                   + (f" · {speed:.0f} ms per question" if speed else ""))
+        if "ms" in frame and frame["ms"].notna().any():
+            st.caption(f"{MODELS[name]['where']} · average {frame['ms'].mean():.0f} ms, "
+                       f"median {frame['ms'].median():.0f} ms per question")
+        else:
+            speed = timings.get(name)
+            st.caption(MODELS[name]["where"]
+                       + (f" · {speed:.0f} ms per question" if speed else ""))
 
 st.subheader("Correct answers by test group")
 order = list(dict.fromkeys(cases["group"]))
@@ -194,7 +202,36 @@ chart = (
     .properties(height=360))
 st.altair_chart(chart, use_container_width=True)
 
+timed = {name: frame for name, frame in results.items()
+         if "ms" in frame and frame["ms"].notna().any()}
+if timed:
+    st.subheader("Response time by test group")
+    by_time = pd.concat(
+        [frame.groupby("group")["ms"].mean().reset_index()
+         .assign(model=MODELS[name]["label"]) for name, frame in timed.items()])
+    time_labels = [MODELS[n]["label"] for n in timed]
+    time_chart = (
+        alt.Chart(by_time)
+        .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+        .encode(
+            x=alt.X("group:N", sort=order, title=None, axis=alt.Axis(labelAngle=0)),
+            xOffset=alt.XOffset("model:N", sort=time_labels),
+            y=alt.Y("ms:Q", title="Average milliseconds per question"),
+            color=alt.Color("model:N", sort=time_labels, title=None,
+                            scale=alt.Scale(domain=time_labels,
+                                            range=[MODELS[n]["color"] for n in timed]),
+                            legend=alt.Legend(orient="top")),
+            tooltip=[alt.Tooltip("model:N", title="Model"),
+                     alt.Tooltip("group:N", title="Group"),
+                     alt.Tooltip("ms:Q", title="Average ms", format=".0f")])
+        .properties(height=320))
+    st.altair_chart(time_chart, use_container_width=True)
+    st.caption("Time from sending a question to receiving the answer. Jev's time "
+               "includes the internet round trip; the local models' times depend "
+               "on this machine. One untimed warm-up question is sent before each run.")
+
 st.subheader("Every test case")
+show_time = bool(timed) and st.checkbox("Show response time for each case")
 table = cases[["id", "group", "text", "expected"]].copy()
 table["text"] = table["text"].str.slice(0, 400)
 for name, frame in results.items():
@@ -203,6 +240,9 @@ for name, frame in results.items():
     table[label] = table["id"].map(
         lambda i: (("PASS  " if answers.at[i, "correct"] else "FAIL  ")
                    + answers.at[i, "got"]) if i in answers.index else "not run")
+    if show_time and name in timed:
+        table[label + " ms"] = table["id"].map(
+            lambda i: f"{answers.at[i, 'ms']:.0f}" if i in answers.index else "")
 
 model_columns = [MODELS[n]["label"] for n in results]
 passed = table[model_columns].apply(lambda col: col.str.startswith("PASS"))

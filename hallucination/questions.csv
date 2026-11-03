@@ -1,0 +1,2 @@
+group,task,type,instructions,options
+hallucination,answer_vs_context,choice,"Compare the answer with the context. Is the answer supported by the context, contradicted by it, or not mentioned in it?",correct: the context states this answer | incorrect: the context says something different | unsupported: the context does not mention this at all
